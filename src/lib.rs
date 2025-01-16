@@ -194,6 +194,9 @@ const Y_GET_CRUMB_URL: &str = "https://query1.finance.yahoo.com/v1/test/getcrumb
 const Y_COOKIE_REQUEST_HEADER: &str = "set-cookie";
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
+// Default value for reqwest is 30 seconds
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
 // Macros instead of constants,
 macro_rules! YCHART_PERIOD_QUERY {
     () => {
@@ -246,7 +249,7 @@ impl YahooConnector {
 
     pub fn builder() -> YahooConnectorBuilder {
         YahooConnectorBuilder {
-            inner: Client::builder(),
+            inner: Client::builder().user_agent(USER_AGENT),
         }
     }
 }
@@ -262,24 +265,52 @@ impl Default for YahooConnector {
 }
 
 impl YahooConnectorBuilder {
-    pub fn build(self) -> Result<YahooConnector, YahooError> {
-        self.build_with_agent(USER_AGENT)
-    }
-
-    pub fn build_with_agent(self, user_agent: &str) -> Result<YahooConnector, YahooError> {
-        let client = Client::builder().user_agent(user_agent).build()?;
-
-        Ok(YahooConnector {
-            client,
-            url: YCHART_URL,
-            search_url: YSEARCH_URL,
-        })
+    pub fn new() -> Self {
+        YahooConnector::builder()
     }
 
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.inner = self.inner.timeout(timeout);
-
         self
+    }
+
+    pub fn user_agent(mut self, user_agent: &str) -> Self {
+        self.inner = self.inner.user_agent(user_agent);
+        self
+    }
+
+    pub fn proxy(mut self, url: &str, auth: Option<(&str, &str)>) -> Self {
+        let mut proxy = reqwest::Proxy::all(url).unwrap();
+
+        if let Some((login, password)) = auth {
+            proxy = proxy.basic_auth(login, password);
+        }
+
+        self.inner = self.inner.proxy(proxy);
+        self
+    }
+
+    pub fn build(self) -> Result<YahooConnector, YahooError> {
+        Ok(YahooConnector {
+            client: self.inner.build()?,
+            ..Default::default()
+        })
+    }
+
+    pub fn build_with_agent(user_agent: &str) -> Result<YahooConnector, YahooError> {
+        let client = Client::builder().user_agent(user_agent).build()?;
+
+        Ok(YahooConnector {
+            client,
+            ..Default::default()
+        })
+    }
+
+    pub fn build_with_client(client: Client) -> Result<YahooConnector, YahooError> {
+        Ok(YahooConnector {
+            client,
+            ..Default::default()
+        })
     }
 }
 
